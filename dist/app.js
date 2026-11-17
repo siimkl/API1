@@ -20,23 +20,23 @@
     requestFeedback: $("#requestFeedback"), resultViz: $("#resultViz"), chartTitle: $("#chartTitle"),
     barChart: $("#barChart"), chartInsight: $("#chartInsight"), validationSection: $("#validationSection"),
     validationFields: $("#validationFields"), checkScore: $("#checkScore"), takeaway: $("#takeaway"),
-    practiceSuite: $(".practice-suite"),
-    decoderRound: $("#decoderRound"), decoderBar: $("#decoderBar"), decoderScore: $("#decoderScore"), decoderPrompt: $("#decoderPrompt"),
-    decoderKicker: $("#decoderKicker"), decoderQuestionNumber: $("#decoderQuestionNumber"),
-    decoderHint: $("#decoderHint"), decoderOptions: $("#decoderOptions"), methodScenario: $("#methodScenario"),
-    methodRound: $("#methodRound"), methodBar: $("#methodBar"), methodScore: $("#methodScore"),
-    methodKicker: $("#methodKicker"), methodQuestionNumber: $("#methodQuestionNumber"),
-    methodOptions: $("#methodOptions"), methodFeedback: $("#methodFeedback"),
-    conceptRound: $("#conceptRound"), conceptBar: $("#conceptBar"), conceptScore: $("#conceptScore"),
-    conceptKicker: $("#conceptKicker"), conceptQuestionNumber: $("#conceptQuestionNumber"),
-    conceptPrompt: $("#conceptPrompt"), conceptOptions: $("#conceptOptions"), conceptFeedback: $("#conceptFeedback")
+    practiceSuite: $(".practice-suite"), practiceCompleted: $("#practiceCompleted"), testMap: $("#testMap"),
+    practiceCelebration: $("#practiceCelebration"), restartTests: $("#restartTests"),
+    workflowKicker: $("#workflowKicker"), workflowRound: $("#workflowRound"), workflowScore: $("#workflowScore"),
+    workflowBar: $("#workflowBar"), workflowQuestionNumber: $("#workflowQuestionNumber"), workflowPrompt: $("#workflowPrompt"),
+    workflowOptions: $("#workflowOptions"), workflowFeedback: $("#workflowFeedback"), workflowNext: $("#workflowNext")
   };
 
   const initialState = () => ({
     metadata: false, successfulPost: false, responseViewed: false, checks: 0, currentStep: 1,
-    xp: 0, awards: new Set(), methodRound: 0, methodScore: 0,
-    methodLocked: false, decoderRound: 0, decoderScore: 0, decoderLocked: false,
-    conceptRound: 0, conceptScore: 0, conceptLocked: false
+    xp: 0, awards: new Set(), completedTests: new Set(), unlockedTests: new Set(["workflow"]), activeTest: "workflow",
+    workflow: { next: 0, mistakes: 0, complete: false },
+    quizzes: {
+      rcode: { index: 0, score: 0, locked: false, complete: false, wrongAnswers: 0, hintUsed: false },
+      url: { index: 0, score: 0, locked: false, complete: false, wrongAnswers: 0, hintUsed: false },
+      method: { index: 0, score: 0, locked: false, complete: false, wrongAnswers: 0, hintUsed: false },
+      detective: { index: 0, score: 0, locked: false, complete: false, wrongAnswers: 0, hintUsed: false }
+    }
   });
   let state = initialState();
   let dialogTarget = null;
@@ -114,47 +114,168 @@
     "2026Q2": 2243
   });
 
-  const methodRounds = [
-    { text: "Vaja on kolme väärtust ühest veebitabelist.", correct: "manual", why: "Väikese ühekordse ülesande puhul on kõige lihtsam kasutada veebitabelit." },
-    { text: "Suur andmestik on juba CSV-failina saadaval.", correct: "file", why: "Kui valmis fail on olemas, on kõige lihtsam see alla laadida." },
-    { text: "Statistikat tuleb igal kuul automaatselt uuendada.", correct: "api", why: "API sobib, sest sama päringut saab automaatselt korrata." },
-    { text: "API puudub, kuid vajalik avalik info on veebilehel nähtav.", correct: "scrape", why: "Kui API-t pole, võib kaaluda kraapimist. Enne kontrolli kasutustingimusi." },
-    { text: "Kaks süsteemi peavad andmeid regulaarselt vahetama.", correct: "api", why: "API abil saavad süsteemid omavahel andmeid vahetada." }
+  const workflowSteps = [
+    "Laadi pxweb-pakett.",
+    "Salvesta tabeli PA111 API aadress.",
+    "Küsi GET-päringuga metaandmed.",
+    "Koosta list()-iga soovitud andmete valik.",
+    "Saada valik ja küsi POST-päringuga statistilised andmed.",
+    "Muuda API vastus R-i andmetabeliks."
   ];
 
-  const decoderRounds = [
-    { prompt: "Päringu JSON on vigases vormingus.", code: "400", why: "400 tähendab, et päringu sisus on viga." },
-    { prompt: "Ligipääsutunnus puudub või ei kehti.", code: "401", why: "401 puhul kontrolli ligipääsutunnust." },
-    { prompt: "Aadressis nimetatud tabelit ei leitud.", code: "404", why: "404 puhul kontrolli aadressi ja tabeli koodi." },
-    { prompt: "Klient saadab liiga palju päringuid liiga kiiresti.", code: "429", why: "429 tähendab, et päringuid on liiga palju. Proovi hiljem uuesti." }
-  ];
-
-  const conceptRounds = [
-    {
-      prompt: "Mida saad teada GET-päringuga tabelile PA111?",
-      options: ["Palgaandmed kohe", "Tabeli muutujad ja valikud", "Ainult failinime", "RStudio joonise"],
-      correct: 1,
-      why: "GET-vastus kirjeldab tabeli muutujaid ja lubatud valikuid."
+  const quizDefinitions = {
+    rcode: {
+      label: "R-i käsud",
+      completion: "R-i põhitööriistad on paigas: oskad valikut koostada, tabelit uurida ja andmemahtu hinnata.",
+      rounds: [
+        {
+          prompt: "Milline R-i funktsioon koondab kolm perioodikoodi üheks valikuks?",
+          options: ["list()", "c()", "View()", "nrow()"], correct: 1,
+          why: "c() ühendab väärtused vektoriks: c(\"2024Q2\", \"2025Q2\", \"2026Q2\")."
+        },
+        {
+          prompt: "Millise käsuga kontrollid, kas palgad-tabelis on oodatud kolm rida?",
+          options: ["names(palgad)", "str(palgad)", "nrow(palgad)", "View(url)"], correct: 2,
+          why: "nrow(palgad) tagastab andmetabeli ridade arvu."
+        },
+        {
+          prompt: "Milline käsk näitab korraga veerge, väärtuste näiteid ja andmetüüpe?",
+          options: ["str(palgad)", "round(palgad)", "paste0(palgad)", "order(url)"], correct: 0,
+          why: "str() annab kompaktse ülevaate objekti ülesehitusest ja veergude tüüpidest."
+        },
+        {
+          prompt: "Päringus on 2 näitajat × 1 tegevusala × 3 perioodi. Mitu statistilist väärtust peab vastus sisaldama?",
+          options: ["3", "5", "6", "9"], correct: 2,
+          why: "Mõõtmete kombinatsioonid korrutatakse: 2 × 1 × 3 = 6 väärtust."
+        }
+      ]
     },
-    {
-      prompt: "Kus määrad POST-päringus näitaja, tegevusala ja perioodid?",
-      options: ["Aadressis", "Päringu kehas", "Olekukoodis", "Vastuse päises"],
-      correct: 1,
-      why: "Soovitud andmevalikud kirjeldatakse POST-päringu JSON-kehas."
+    url: {
+      label: "URL-päring",
+      completion: "Open‑Meteo GET-päring on valmis: tunned parameetrite algust, eraldajat ja Tallinna seitsme päeva valikut.",
+      rounds: [
+        {
+          prompt: "Mis märk alustab URL-is päringuparameetrite osa?",
+          options: ["?", "&", "#", "/"], correct: 0,
+          why: "Küsimärk eraldab API otspunkti päringuparameetritest."
+        },
+        {
+          prompt: "Mis märk eraldab URL-is latitude-, longitude- ja daily-parameetrid?",
+          options: ["+", ":", "&", "="], correct: 2,
+          why: "& eraldab üksteisele järgnevad parameetrid; = seob parameetri selle väärtusega."
+        },
+        {
+          prompt: "Milline koordinaadipaar viib Open‑Meteo päringu Tallinnasse?",
+          options: ["58.38, 26.73", "59.44, 24.75", "57.78, 26.03", "60.17, 24.94"], correct: 1,
+          why: "Slaidide Tallinna näites on latitude=59.44 ja longitude=24.75."
+        },
+        {
+          prompt: "Milline URL-i osa küsib seitsme päeva prognoosi?",
+          options: ["days=7", "forecast=week", "forecast_days=7", "daily=7"], correct: 2,
+          why: "Open‑Meteo näites määrab päevade arvu parameeter forecast_days=7."
+        }
+      ]
     },
-    {
-      prompt: "Mida kinnitab vastuse olekukood 200 OK?",
-      options: ["Andmed on kindlasti õiged", "Päring õnnestus tehniliselt", "Ühik on alati euro", "Kõik aastad on olemas"],
-      correct: 1,
-      why: "200 OK kinnitab tehnilist õnnestumist, mitte andmete sisulist õigsust."
+    method: {
+      label: "Meetodi valik",
+      completion: "Meetod valitud: lähtud nüüd ülesande mahust, korduvusest ja olemasolevast ligipääsust.",
+      rounds: [
+        {
+          prompt: "Vaja on kolme väärtust ühest veebitabelist ainult ühe korra.",
+          options: ["Veebiliides / käsitsi", "Fail", "API", "Kraapimine"], correct: 0,
+          why: "Väikese ühekordse ülesande puhul on veebiliides sageli kõige lihtsam."
+        },
+        {
+          prompt: "Suur andmestik on juba valmis CSV-failina saadaval.",
+          options: ["Käsitsi", "Faili allalaadimine", "API", "Kraapimine"], correct: 1,
+          why: "Kui sobiv fail on olemas, väldib allalaadimine tarbetut API-tööd."
+        },
+        {
+          prompt: "Statistikat tuleb igal kuul sama skriptiga uuendada.",
+          options: ["Käsitsi", "Ekraanipilt", "API", "PDF"], correct: 2,
+          why: "API tugevus on sama päringu korratav ja automatiseeritav käivitamine."
+        },
+        {
+          prompt: "API puudub, kuid vajalik avalik info on veebilehel nähtav.",
+          options: ["Käsitsi alati", "Faili väljamõtlemine", "API", "Võimalusel kraapimine"], correct: 3,
+          why: "Kraapimist võib kaaluda pärast kasutustingimuste ja eetiliste piiride kontrolli."
+        },
+        {
+          prompt: "Kaks süsteemi peavad andmeid regulaarselt vahetama.",
+          options: ["Käsitsi", "CSV e-postiga", "API", "Ekraanipildid"], correct: 2,
+          why: "Süsteemide korduva andmevahetuse jaoks on API loomulik valik."
+        }
+      ]
     },
-    {
-      prompt: "Mida teha enne API-st saadud andmete kasutamist?",
-      options: ["Kontrollida sisu, ühikut ja tähendust", "Vaadata ainult olekukoodi", "Eemaldada metaandmed", "Asendada POST GET-päringuga"],
-      correct: 0,
-      why: "Enne kasutamist kontrolli alati vastuse sisu, ühikut, tähendust ja ajakohasust."
+    detective: {
+      label: "Vastuse tõlgendamine",
+      completion: "Juhtum lahendatud: eristad tehnilist edu, andmete tähendust ja eri API-de vastusestruktuure.",
+      rounds: [
+        {
+          prompt: "API vastab „200 OK”. Mida saad kindlalt järeldada?",
+          options: ["Andmed on sisuliselt õiged", "Päring õnnestus tehniliselt", "Ühik on euro", "Kõik perioodid saabusid"], correct: 1,
+          why: "200 OK kinnitab tehnilist õnnestumist; sisu, ühik ja perioodid vajavad eraldi kontrolli."
+        },
+        {
+          prompt: "API vastab „404 Not Found”. Mida kontrollid esimesena?",
+          options: ["Tabeli aadressi ja koodi", "Arvude keskmist", "Joonise värvi", "CSV eraldajat"], correct: 0,
+          why: "404 viitab, et soovitud ressurssi ei leitud; kontrolli otspunkti ja tabeli koodi."
+        },
+        {
+          prompt: "API vastab „429 Too Many Requests”. Mis on mõistlik tegevus?",
+          options: ["Saada kohe rohkem päringuid", "Oota ja vähenda päringusagedust", "Muuda kõik väärtused nulliks", "Kasuta 404 aadressi"], correct: 1,
+          why: "429 tähendab päringulimiidi ületamist. Oota, järgi juhiseid ja aeglusta päringuid."
+        },
+        {
+          prompt: "Miks kasutatakse Maailmapanga vastuses vastus_wb[[2]]?",
+          options: ["Et valida vaatluste osa", "Et korrutada rahvaarv kahega", "Et valida teine riik", "Et muuta POST GET-iks"], correct: 0,
+          why: "Maailmapanga JSON-vastuse esimene osa sisaldab metaandmeid ja teine vaatlusi."
+        },
+        {
+          prompt: "Kas sama Open‑Meteo päring annab homme tingimata täpselt sama prognoosi?",
+          options: ["Jah, API vastus ei muutu", "Ei, prognoos uueneb", "Jah, kui URL on sama", "Ainult RStudio otsustab"], correct: 1,
+          why: "Ilmaprognoos on ajas uuenev hinnang; sama päringu tulemus võib järgmisel päeval muutuda."
+        },
+        {
+          prompt: "Mida kontrollid enne PA111 palgaväärtuste kasutamist?",
+          options: ["Ainult olekukoodi", "Näitajat, ühikut, perioodi ja ajakohasust", "Ainult failinime", "Ainult ridade värvi"], correct: 1,
+          why: "Sisuline kontroll seob väärtuse õige näitaja, ühiku, perioodi, allika ja uuendusajaga."
+        }
+      ]
     }
-  ];
+  };
+
+  const quizHints = {
+    rcode: [
+      "Otsi funktsiooni, mis ühendab mitu väärtust üheks vektoriks.",
+      "Küsimus on ridade arvus, mitte veergude nimedes ega tüüpides.",
+      "Selle käsu nimi on lühend ingliskeelsest sõnast structure.",
+      "Korruta iga mõõtme valikute arv: näitajad × tegevusalad × perioodid."
+    ],
+    url: [
+      "See märk paikneb otspunkti ja esimese parameetri vahel.",
+      "Parameetri nimi ja väärtus kasutavad = märki; parameetrite omavaheliseks eraldamiseks on teine märk.",
+      "Tartu näide algab 58.38 ja 26.73; Tallinn asub põhja ja lääne pool.",
+      "Parameetri nimi koosneb sõnadest forecast ja days."
+    ],
+    method: [
+      "Mõtle, kas kolme arvu jaoks tasub enne automatiseerimist programmeerida.",
+      "Kasuta esmalt juba olemasolevat sobivat andmeallikat.",
+      "Korduvus ja automatiseerimine on ühe meetodi suurim tugevus.",
+      "Kui ametlikku masinliidest pole, jääb üle veebilehe lubatud viisil lugemine.",
+      "Regulaarne süsteemidevaheline andmevahetus vajab masinliidest."
+    ],
+    detective: [
+      "Olekukood kirjeldab päringu tehnilist tulemust, mitte arvude tähendust.",
+      "404 tähendab, et soovitud ressurssi ei leitud.",
+      "429 viitab päringusageduse piirangule.",
+      "Maailmapanga vastuse esimene osa on metaandmed, teine osa sisaldab vaatlusi.",
+      "Ilmaprognoos on ajas uuenev hinnang.",
+      "Hea kontroll seob arvu näitaja, ühiku, perioodi ja uuendusajaga."
+    ]
+  };
+
+  const testOrder = ["workflow", "rcode", "url", "method", "detective"];
 
   function populateSelectionOptions() {
     const [indicator, activity, period] = metadataResponse.variables;
@@ -350,8 +471,8 @@
     }
     if (state.checks === 4) {
       setProgress(4, true);
-      setStory(4, "<b>Vastus on vaadatud ja kontrollitud.</b> Järgmisena harjuta API olekukoode.");
-      setGuide("Vastus on kontrollitud. Järgmisena harjuta olekukoode", els.decoderKicker, "Näita testi");
+      setStory(4, "<b>Vastus on vaadatud ja kontrollitud.</b> Järgmisena kinnista API kasutamise teemasid viies lühikeses harjutuses.");
+      setGuide("Vastus on kontrollitud. Alusta esimesest harjutusest", els.workflowKicker, "Näita harjutust");
       return;
     }
     setProgress(4);
@@ -584,9 +705,9 @@
       setPracticeLocked(false);
       award("validation", 25);
       setProgress(4, true);
-      setStory(4, "<b>Sisu ja tähendus on kontrollitud.</b> Järgmisena harjuta API olekukoode.");
-      setGuide("Kontroll on tehtud. Järgmisena harjuta olekukoode", els.decoderKicker, "Näita testi");
-      window.setTimeout(() => els.decoderOptions.scrollIntoView({ behavior: "smooth", block: "center" }), 220);
+      setStory(4, "<b>Sisu ja tähendus on kontrollitud.</b> Järgmisena kinnista API kasutamise teemasid viies lühikeses harjutuses.");
+      setGuide("Kontroll on tehtud. Alusta esimesest harjutusest", els.workflowKicker, "Näita harjutust");
+      window.setTimeout(() => els.workflowOptions.scrollIntoView({ behavior: "smooth", block: "center" }), 220);
     } else if (state.successfulPost) {
       setProgress(4);
       const nextCheck = $("#validationFields .check-card:not(:has(input:checked))");
@@ -600,6 +721,7 @@
     if (locked) els.practiceSuite.setAttribute("aria-disabled", "true");
     else els.practiceSuite.removeAttribute("aria-disabled");
     $$("button", els.practiceSuite).forEach(button => { button.disabled = locked; });
+    if (!locked) syncTestMap();
   }
 
   function updateQuestionVisual(question, numberLabel, index, total) {
@@ -611,152 +733,275 @@
     question.classList.add("question-updated");
   }
 
-  function renderDecoderRound() {
-    const round = decoderRounds[state.decoderRound];
-    els.decoderPrompt.textContent = round.prompt;
-    updateQuestionVisual(els.decoderPrompt.closest(".test-question"), els.decoderQuestionNumber, state.decoderRound, decoderRounds.length);
-    els.decoderRound.textContent = `${state.decoderRound + 1} / ${decoderRounds.length}`;
-    els.decoderBar.style.width = `${((state.decoderRound + 1) / decoderRounds.length) * 100}%`;
-    els.decoderScore.textContent = `${state.decoderScore} ${state.decoderScore === 1 ? "õige" : "õiget"}`;
-    els.decoderHint.className = "test-feedback";
-    els.decoderHint.textContent = "Vali kõige sobivam olekukood.";
-    state.decoderLocked = false;
-    $$('button', els.decoderOptions).forEach(button => {
-      button.disabled = false;
-      button.classList.remove("correct", "wrong");
+  function syncTestMap() {
+    const suiteLocked = els.practiceSuite.classList.contains("locked");
+    $$('button[data-open-test]', els.testMap).forEach((button, index) => {
+      const id = button.dataset.openTest;
+      const unlocked = state.unlockedTests.has(id) || state.completedTests.has(id);
+      const complete = state.completedTests.has(id);
+      const active = state.activeTest === id;
+      button.disabled = suiteLocked || !unlocked;
+      button.classList.toggle("active", active);
+      button.classList.toggle("done", complete);
+      button.classList.toggle("locked-step", !unlocked);
+      if (active) button.setAttribute("aria-current", "step");
+      else button.removeAttribute("aria-current");
+      const status = button.querySelector("small");
+      status.textContent = complete ? "läbitud" : active ? "praegu" : unlocked ? "avatud" : "lukus";
+      button.querySelector("span").textContent = complete ? "✓" : String(index + 1);
     });
-    setGuide(`Olekukood ${state.decoderRound + 1}/4. Vali olukorrale sobiv kood`, els.decoderKicker, "Näita küsimust");
   }
 
-  function chooseDecoder(event) {
-    const button = event.target.closest("button[data-code]");
-    if (!button || state.decoderLocked) return;
-    state.decoderLocked = true;
-    const round = decoderRounds[state.decoderRound];
-    const correct = button.dataset.code === round.code;
-    if (correct) {
-      state.decoderScore += 1;
-      award(`decoder-${state.decoderRound}`, 5);
+  function openTest(id, shouldScroll = true) {
+    if (!state.unlockedTests.has(id) && !state.completedTests.has(id)) return;
+    state.activeTest = id;
+    $$(".practice-card", els.practiceSuite).forEach(card => {
+      card.hidden = card.dataset.test !== id;
+    });
+    syncTestMap();
+    $(`button[data-open-test="${id}"]`, els.testMap)?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    if (shouldScroll) {
+      window.setTimeout(() => $(`[data-test="${id}"]`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 40);
     }
-    $$('button', els.decoderOptions).forEach(item => {
-      item.disabled = true;
-      if (item.dataset.code === round.code) item.classList.add("correct");
-    });
-    if (!correct) button.classList.add("wrong");
-    els.decoderScore.textContent = `${state.decoderScore} ${state.decoderScore === 1 ? "õige" : "õiget"}`;
-    els.decoderHint.className = `test-feedback ${correct ? "good" : "bad"}`;
-    els.decoderHint.textContent = `${correct ? "Õige." : "Vaata õiget vastust."} ${round.why}`;
-    window.setTimeout(() => {
-      if (state.decoderRound < decoderRounds.length - 1) {
-        state.decoderRound += 1;
-        renderDecoderRound();
-      } else {
-        els.decoderPrompt.textContent = `Harjutus tehtud: ${state.decoderScore}/${decoderRounds.length} õiget`;
-        els.decoderHint.className = "test-feedback good";
-        els.decoderHint.textContent = "Olekukood näitab, mida järgmisena kontrollida.";
-        setGuide("Olekukoodid on tehtud. Järgmisena vali olukorrale sobiv meetod", els.methodKicker, "Näita testi");
-      }
-      syncHeight();
-    }, 1800);
+    syncHeight();
   }
 
-  function renderMethodRound() {
-    const round = methodRounds[state.methodRound];
-    els.methodScenario.textContent = round.text;
-    updateQuestionVisual(els.methodScenario.closest(".test-question"), els.methodQuestionNumber, state.methodRound, methodRounds.length);
-    els.methodRound.textContent = `${state.methodRound + 1} / ${methodRounds.length}`;
-    els.methodBar.style.width = `${((state.methodRound + 1) / methodRounds.length) * 100}%`;
-    els.methodScore.textContent = `${state.methodScore} ${state.methodScore === 1 ? "punkt" : "punkti"}`;
-    els.methodFeedback.className = "method-feedback";
-    els.methodFeedback.textContent = "Tee valik, et saada kohe tagasisidet.";
-    state.methodLocked = false;
-    $$('button', els.methodOptions).forEach(button => {
-      button.disabled = false;
-      button.classList.remove("correct", "wrong");
-    });
-    setGuide(`Meetodi valik ${state.methodRound + 1}/5. Vali olukorrale sobiv meetod`, els.methodKicker, "Näita küsimust");
+  function setTestFeedback(target, tone, title, message) {
+    target.className = `test-feedback${tone ? ` ${tone}` : ""}`;
+    const icon = document.createElement("span");
+    icon.className = "feedback-icon";
+    icon.textContent = tone === "good" ? "✓" : tone === "bad" ? "↻" : "i";
+    const copy = document.createElement("span");
+    const heading = document.createElement("strong");
+    heading.textContent = title;
+    const detail = document.createElement("span");
+    detail.textContent = message;
+    copy.append(heading, detail);
+    target.replaceChildren(icon, copy);
   }
 
-  function chooseMethod(event) {
-    const button = event.target.closest("button[data-method]");
-    if (!button || state.methodLocked) return;
-    state.methodLocked = true;
-    const round = methodRounds[state.methodRound];
-    const correct = button.dataset.method === round.correct;
-    if (correct) {
-      state.methodScore += 1;
-      award(`method-${state.methodRound}`, 5);
+  function revealHint(id) {
+    const quiz = state.quizzes[id];
+    const ui = testElements(id);
+    quiz.hintUsed = true;
+    ui.hintPanel.textContent = quizHints[id][quiz.index];
+    ui.hintPanel.hidden = false;
+    ui.hint.textContent = "💡 Vihje avatud";
+    ui.hint.disabled = true;
+  }
+
+  function testElements(id) {
+    return {
+      card: $(`[data-test="${id}"]`),
+      kicker: $(`#${id}Kicker`), round: $(`#${id}Round`), score: $(`#${id}Score`),
+      bar: $(`#${id}Bar`), questionNumber: $(`#${id}QuestionNumber`), prompt: $(`#${id}Prompt`),
+      options: $(`#${id}Options`), feedback: $(`#${id}Feedback`), next: $(`#${id}Next`),
+      hint: $(`#${id}Hint`), hintPanel: $(`#${id}HintPanel`)
+    };
+  }
+
+  function markTestComplete(id) {
+    if (state.completedTests.has(id)) return;
+    state.completedTests.add(id);
+    els.practiceCompleted.textContent = `${state.completedTests.size} / 5`;
+    $(`[data-test="${id}"]`).classList.add("test-complete");
+    award(`test-complete-${id}`, 15);
+    const nextId = testOrder[testOrder.indexOf(id) + 1];
+    if (nextId) state.unlockedTests.add(nextId);
+    syncTestMap();
+    if (state.completedTests.size === 5) {
+      els.practiceCelebration.hidden = false;
+      setGuide("Kõik viis harjutust on tehtud. Soovi korral alusta uuesti", els.resetButton, "Alusta algusest");
     }
-    $$('button', els.methodOptions).forEach(item => {
-      item.disabled = true;
-      if (item.dataset.method === round.correct) item.classList.add("correct");
-    });
-    if (!correct) button.classList.add("wrong");
-    els.methodScore.textContent = `${state.methodScore} ${state.methodScore === 1 ? "punkt" : "punkti"}`;
-    els.methodFeedback.className = `method-feedback ${correct ? "good" : "bad"}`;
-    els.methodFeedback.textContent = `${correct ? "Õige." : "Mõtle veel."} ${round.why}`;
-    window.setTimeout(() => {
-      if (state.methodRound < methodRounds.length - 1) {
-        state.methodRound += 1;
-        renderMethodRound();
-      } else {
-        els.methodScenario.textContent = `Harjutus tehtud: ${state.methodScore}/${methodRounds.length} õiget valikut.`;
-        els.methodFeedback.className = "method-feedback good";
-        els.methodFeedback.textContent = "Vali meetod ülesande, andmemahu ja korduvuse järgi.";
-        setGuide("Meetodi valik on tehtud. Järgmisena testi API mõistmist", els.conceptKicker, "Näita kolmandat testi");
-      }
-      syncHeight();
-    }, 1700);
   }
 
-  function renderConceptRound() {
-    const round = conceptRounds[state.conceptRound];
-    els.conceptPrompt.textContent = round.prompt;
-    updateQuestionVisual(els.conceptPrompt.closest(".test-question"), els.conceptQuestionNumber, state.conceptRound, conceptRounds.length);
-    els.conceptRound.textContent = `${state.conceptRound + 1} / ${conceptRounds.length}`;
-    els.conceptBar.style.width = `${((state.conceptRound + 1) / conceptRounds.length) * 100}%`;
-    els.conceptScore.textContent = `${state.conceptScore} ${state.conceptScore === 1 ? "õige" : "õiget"}`;
-    els.conceptFeedback.className = "concept-feedback test-feedback";
-    els.conceptFeedback.textContent = "Vali üks vastus.";
-    state.conceptLocked = false;
-    $$("button", els.conceptOptions).forEach((button, index) => {
+  function resetWorkflowTest() {
+    state.workflow.next = 0;
+    state.workflow.mistakes = 0;
+    state.workflow.complete = false;
+    els.workflowRound.textContent = `0 / ${workflowSteps.length}`;
+    els.workflowScore.textContent = "start";
+    els.workflowBar.style.width = "0%";
+    els.workflowQuestionNumber.textContent = `1 / ${workflowSteps.length}`;
+    els.workflowPrompt.textContent = "Alusta paketi laadimisest. Seejärel liigu metaandmetest andmetabelini.";
+    setTestFeedback(els.workflowFeedback, "", "Sinu käik", "Klõpsa sammul, mis peab tulema esimesena.");
+    els.workflowNext.hidden = true;
+    $$("button[data-step]", els.workflowOptions).forEach(button => {
       button.disabled = false;
-      button.classList.remove("correct", "wrong");
-      button.querySelector("span").textContent = round.options[index];
+      button.classList.remove("placed", "wrong");
+      button.querySelector("span").textContent = "?";
     });
-    setGuide(`API mõistmine ${state.conceptRound + 1}/${conceptRounds.length}. Vali parim vastus`, els.conceptKicker, "Näita küsimust");
   }
 
-  function chooseConcept(event) {
+  function chooseWorkflowStep(event) {
+    const button = event.target.closest("button[data-step]");
+    if (!button || state.workflow.complete || button.classList.contains("placed")) return;
+    const chosen = Number(button.dataset.step);
+    if (chosen !== state.workflow.next) {
+      state.workflow.mistakes += 1;
+      button.classList.remove("wrong");
+      void button.offsetWidth;
+      button.classList.add("wrong");
+      window.setTimeout(() => button.classList.remove("wrong"), 520);
+      setTestFeedback(els.workflowFeedback, "bad", "See samm tuleb hiljem", `Otsi praegu sammu: ${workflowSteps[state.workflow.next]}`);
+      return;
+    }
+
+    button.classList.add("placed");
+    button.disabled = true;
+    button.querySelector("span").textContent = String(chosen + 1);
+    state.workflow.next += 1;
+    const done = state.workflow.next === workflowSteps.length;
+    els.workflowRound.textContent = `${state.workflow.next} / ${workflowSteps.length}`;
+    els.workflowScore.textContent = state.workflow.mistakes ? `${state.workflow.mistakes} ${state.workflow.mistakes === 1 ? "eksimus" : "eksimust"}` : "puhas rada";
+    els.workflowBar.style.width = `${(state.workflow.next / workflowSteps.length) * 100}%`;
+    els.workflowQuestionNumber.textContent = `${Math.min(state.workflow.next + 1, workflowSteps.length)} / ${workflowSteps.length}`;
+
+    if (done) {
+      state.workflow.complete = true;
+      els.workflowPrompt.textContent = "Töövoog valmis: paketist ja metaandmetest jõudsid kontrollitava R-i andmetabelini.";
+      setTestFeedback(els.workflowFeedback, "good", "Töövoog on koos", "Valik koostatakse enne andmepäringut ning vastus muudetakse tabeliks alles pärast päringut.");
+      els.workflowNext.hidden = false;
+      markTestComplete("workflow");
+      setGuide("R-i töövoo harjutus on tehtud. Järgmisena vaata R-i käske", $("#rcodeKicker"), "Näita harjutust");
+    } else {
+      setTestFeedback(els.workflowFeedback, "good", `Samm ${state.workflow.next} on paigas`, `Järgmisena: ${workflowSteps[state.workflow.next]}`);
+    }
+    syncHeight();
+  }
+
+  function renderQuiz(id) {
+    const definition = quizDefinitions[id];
+    const quiz = state.quizzes[id];
+    const ui = testElements(id);
+    const round = definition.rounds[quiz.index];
+    ui.prompt.textContent = round.prompt;
+    updateQuestionVisual(ui.prompt.closest(".test-question"), ui.questionNumber, quiz.index, definition.rounds.length);
+    ui.round.textContent = `${quiz.index + 1} / ${definition.rounds.length}`;
+    ui.score.textContent = `${quiz.score} ${quiz.score === 1 ? "õige" : "õiget"}`;
+    ui.bar.style.width = `${(quiz.index / definition.rounds.length) * 100}%`;
+    const instruction = id === "url" ? "Vali õige URL-i osa." : id === "method" ? "Vali kõige praktilisem meetod." : id === "detective" ? "Vali kõige täpsem järeldus." : "Vali puuduv käsk või tulemus.";
+    setTestFeedback(ui.feedback, "", "Mõtle esmalt ise", `${instruction} Vajadusel ava vihje.`);
+    ui.next.hidden = true;
+    delete ui.next.dataset.advanceTo;
+    ui.next.textContent = quiz.index === definition.rounds.length - 1 ? "Lõpeta harjutus ✓" : "Järgmine →";
+    quiz.locked = false;
+    quiz.wrongAnswers = 0;
+    quiz.hintUsed = false;
+    ui.hint.hidden = false;
+    ui.hint.disabled = false;
+    ui.hint.textContent = "💡 Ava vihje";
+    ui.hintPanel.hidden = true;
+    ui.hintPanel.textContent = "";
+    const letters = ["A", "B", "C", "D"];
+    const buttons = round.options.map((option, index) => {
+      const answer = document.createElement("button");
+      answer.type = "button";
+      answer.dataset.answer = String(index);
+      const key = document.createElement("b");
+      key.className = "answer-key";
+      key.textContent = letters[index];
+      const value = document.createElement("span");
+      value.textContent = option;
+      answer.append(key, value);
+      return answer;
+    });
+    ui.options.replaceChildren(...buttons);
+  }
+
+  function chooseQuizAnswer(event) {
     const button = event.target.closest("button[data-answer]");
-    if (!button || state.conceptLocked) return;
-    state.conceptLocked = true;
-    const round = conceptRounds[state.conceptRound];
-    const correct = Number(button.dataset.answer) === round.correct;
-    if (correct) {
-      state.conceptScore += 1;
-      award(`concept-${state.conceptRound}`, 5);
+    const id = event.currentTarget.closest("[data-test]")?.dataset.test;
+    if (!button || !id || !quizDefinitions[id]) return;
+    const quiz = state.quizzes[id];
+    if (quiz.locked || quiz.complete) return;
+    const definition = quizDefinitions[id];
+    const round = definition.rounds[quiz.index];
+    const selected = Number(button.dataset.answer);
+    const correct = selected === round.correct;
+    const ui = testElements(id);
+
+    if (!correct) {
+      quiz.wrongAnswers += 1;
+      button.disabled = true;
+      button.classList.add("wrong");
+      revealHint(id);
+      setTestFeedback(ui.feedback, "bad", "Veel mitte — proovi uuesti", quizHints[id][quiz.index]);
+      syncHeight();
+      return;
     }
-    $$("button", els.conceptOptions).forEach((item, index) => {
+
+    quiz.locked = true;
+    quiz.score += 1;
+    award(`${id}-${quiz.index}`, 5);
+    $$("button[data-answer]", ui.options).forEach((item, index) => {
       item.disabled = true;
       if (index === round.correct) item.classList.add("correct");
     });
-    if (!correct) button.classList.add("wrong");
-    els.conceptScore.textContent = `${state.conceptScore} ${state.conceptScore === 1 ? "õige" : "õiget"}`;
-    els.conceptFeedback.className = `concept-feedback test-feedback ${correct ? "good" : "bad"}`;
-    els.conceptFeedback.textContent = `${correct ? "Õige." : "Vaata õiget vastust."} ${round.why}`;
-    window.setTimeout(() => {
-      if (state.conceptRound < conceptRounds.length - 1) {
-        state.conceptRound += 1;
-        renderConceptRound();
-      } else {
-        els.conceptPrompt.textContent = `Kolm testi tehtud. Skoor: ${state.conceptScore}/${conceptRounds.length}.`;
-        els.conceptFeedback.className = "concept-feedback test-feedback good";
-        els.conceptFeedback.textContent = "Oskad eristada metaandmeid, päringu keha, olekukoodi ja sisulist kontrolli.";
-        setGuide("Kõik kolm testi on tehtud. Võid alustada algusest", els.resetButton, "Alusta algusest");
-      }
-      syncHeight();
-    }, 1800);
+    ui.score.textContent = `${quiz.score} ${quiz.score === 1 ? "õige" : "õiget"}`;
+    ui.bar.style.width = `${((quiz.index + 1) / definition.rounds.length) * 100}%`;
+    const title = quiz.wrongAnswers ? "Leidsid õige vastuse" : "Õige esimesel katsel";
+    setTestFeedback(ui.feedback, "good", title, round.why);
+    ui.hint.hidden = true;
+    ui.hintPanel.hidden = true;
+    ui.next.hidden = false;
+    ui.next.focus({ preventScroll: true });
+    syncHeight();
+  }
+
+  function nextQuizRound(event) {
+    const advanceTo = event.currentTarget.dataset.advanceTo;
+    if (advanceTo) {
+      delete event.currentTarget.dataset.advanceTo;
+      openTest(advanceTo);
+      return;
+    }
+    const id = event.currentTarget.closest("[data-test]")?.dataset.test;
+    if (!id || !quizDefinitions[id]) return;
+    const quiz = state.quizzes[id];
+    const definition = quizDefinitions[id];
+    if (!quiz.locked || quiz.complete) return;
+    if (quiz.index < definition.rounds.length - 1) {
+      quiz.index += 1;
+      renderQuiz(id);
+      return;
+    }
+
+    quiz.complete = true;
+    const ui = testElements(id);
+    ui.prompt.textContent = `${definition.label} läbitud: ${quiz.score}/${definition.rounds.length} õiget.`;
+    setTestFeedback(ui.feedback, "good", "Harjutus tehtud", definition.completion);
+    ui.hint.hidden = true;
+    ui.hintPanel.hidden = true;
+    markTestComplete(id);
+    const nextId = testOrder[testOrder.indexOf(id) + 1];
+    if (nextId) {
+      ui.next.hidden = false;
+      ui.next.dataset.advanceTo = nextId;
+      ui.next.textContent = `Jätka: ${quizDefinitions[nextId].label} →`;
+      setGuide(`${definition.label} tehtud. Järgmisena: ${quizDefinitions[nextId].label}`, $(`#${nextId}Kicker`), "Näita harjutust");
+    } else {
+      ui.next.hidden = true;
+      window.setTimeout(() => els.practiceCelebration.scrollIntoView({ behavior: "smooth", block: "center" }), 120);
+    }
+    syncHeight();
+  }
+
+  function resetTests() {
+    state.completedTests = new Set();
+    state.unlockedTests = new Set(["workflow"]);
+    state.activeTest = "workflow";
+    state.workflow = { next: 0, mistakes: 0, complete: false };
+    Object.keys(quizDefinitions).forEach(id => {
+      state.quizzes[id] = { index: 0, score: 0, locked: false, complete: false, wrongAnswers: 0, hintUsed: false };
+    });
+    els.practiceCompleted.textContent = "0 / 5";
+    els.practiceCelebration.hidden = true;
+    $$(".practice-card", els.practiceSuite).forEach(card => card.classList.remove("test-complete"));
+    resetWorkflowTest();
+    Object.keys(quizDefinitions).forEach(renderQuiz);
+    openTest("workflow", false);
+    syncTestMap();
   }
 
   function resetLab() {
@@ -790,9 +1035,7 @@
     setStory(1, "<b>Alusta tabeli kirjeldusest.</b> GET-päring näitab, milliseid andmeid saab küsida.");
     els.flowStatus.textContent = "Päringut pole veel saadetud";
     updateRequestPreview();
-    renderDecoderRound();
-    renderMethodRound();
-    renderConceptRound();
+    resetTests();
     setPracticeLocked(true);
     setProgress(1);
     hideGuide(els.getMetadata);
@@ -837,9 +1080,23 @@
     if (state.metadata && !state.successfulPost) setGuide("Saada valitud andmete POST-päring", els.sendRequest, "Näita nuppu");
   });
   els.validationFields.addEventListener("change", updateChecks);
-  els.decoderOptions.addEventListener("click", chooseDecoder);
-  els.methodOptions.addEventListener("click", chooseMethod);
-  els.conceptOptions.addEventListener("click", chooseConcept);
+  els.workflowOptions.addEventListener("click", chooseWorkflowStep);
+  els.workflowNext.addEventListener("click", () => openTest("rcode"));
+  els.testMap.addEventListener("click", event => {
+    const button = event.target.closest("button[data-open-test]");
+    if (button) openTest(button.dataset.openTest);
+  });
+  $$(".quiz-options", els.practiceSuite).forEach(options => options.addEventListener("click", chooseQuizAnswer));
+  $$(".next-question", els.practiceSuite).forEach(button => button.addEventListener("click", nextQuizRound));
+  $$(".hint-button", els.practiceSuite).forEach(button => button.addEventListener("click", event => {
+    const id = event.currentTarget.closest("[data-test]")?.dataset.test;
+    if (id && state.quizzes[id] && !state.quizzes[id].locked) revealHint(id);
+  }));
+  els.restartTests.addEventListener("click", () => {
+    resetTests();
+    setPracticeLocked(false);
+    els.testMap.scrollIntoView({ behavior: "smooth", block: "center" });
+  });
   window.addEventListener("message", event => {
     if (event.data?.type === "simfluence:measure" || event.data?.type === "measure") syncHeight();
   });
@@ -849,9 +1106,7 @@
   if ("ResizeObserver" in window) new ResizeObserver(syncHeight).observe(document.body);
   populateSelectionOptions();
   updateRequestPreview();
-  renderDecoderRound();
-  renderMethodRound();
-  renderConceptRound();
+  resetTests();
   setPracticeLocked(true);
   setProgress(1);
   hideGuide(els.getMetadata);
